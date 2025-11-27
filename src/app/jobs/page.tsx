@@ -1,953 +1,500 @@
-import React, { useState, useEffect } from 'react';
+// src/app/jobs/page.tsx
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  Building2, FileText, Upload, Link2, Sparkles, Save,
-  AlertCircle, CheckCircle, Loader2, Mail, Linkedin, Globe,
-  Tag, User, Calendar, DollarSign, MapPin, Clock, Plus, Search,
-  Users, Briefcase, X, ChevronDown
+  Briefcase, Plus, Search, Filter, Grid, List, Trello,
+  MapPin, DollarSign, Calendar, Users, TrendingUp,
+  Building2, Clock, MoreVertical, Eye, Edit2, Trash2,
+  Target, CheckCircle, AlertCircle, Play, Pause
 } from 'lucide-react';
 
-// ============================================================================
-// MAIN COMPONENT
-// ============================================================================
-export default function JobIntakeRedesigned() {
-  const [step, setStep] = useState<'source' | 'extract' | 'review'>('source');
-  const [jobData, setJobData] = useState<any>(null);
-  const [sourceType, setSourceType] = useState('');
+type ViewMode = 'grid' | 'list' | 'kanban';
+type JobStatus = 'all' | 'active' | 'draft' | 'on_hold' | 'closed';
+
+interface Job {
+  id: string;
+  title: string;
+  client: {
+    id: string;
+    name: string;
+  };
+  status: 'active' | 'draft' | 'on_hold' | 'closed';
+  location: string;
+  contract_type: 'freelance' | 'permanent';
+  rate_range?: string;
+  salary_range?: string;
+  num_positions: number;
+  filled_positions: number;
+  candidates_count: number;
+  submissions_count: number;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  created_at: string;
+  start_date: string;
+  required_skills: string[];
+  assigned_to?: {
+    id: string;
+    name: string;
+  };
+  health_score: number; // 0-100
+}
+
+// This will be replaced with real API data
+const PLACEHOLDER_JOBS: Job[] = [];
+
+export default function JobsListPage() {
+  const router = useRouter();
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [statusFilter, setStatusFilter] = useState<JobStatus>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Replace with: const { data: jobs, loading } = useJobs();
+  const jobs = PLACEHOLDER_JOBS;
+  const loading = false;
+
+  const filteredJobs = jobs.filter(job => {
+    const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
+    const matchesSearch = job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          job.client.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
+
+  const stats = {
+    total: jobs.length,
+    active: jobs.filter(j => j.status === 'active').length,
+    draft: jobs.filter(j => j.status === 'draft').length,
+    filled: jobs.filter(j => j.filled_positions === j.num_positions).length
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      <div className="max-w-5xl mx-auto">
-        {/* Minimal Header */}
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">New Job</h1>
-          <p className="text-sm text-gray-500 mt-1">Add job details in 3 simple steps</p>
-        </div>
-
-        {/* Progress Pills */}
-        <div className="flex items-center gap-3 mb-8">
-          <StepPill number={1} label="Source" active={step === 'source'} completed={step !== 'source'} />
-          <div className="h-px bg-gray-300 flex-1 max-w-20"></div>
-          <StepPill number={2} label="Details" active={step === 'extract'} completed={step === 'review'} />
-          <div className="h-px bg-gray-300 flex-1 max-w-20"></div>
-          <StepPill number={3} label="Review" active={step === 'review'} />
-        </div>
-
-        {/* Step Content */}
-        {step === 'source' && (
-          <SourceStep 
-            sourceType={sourceType}
-            setSourceType={setSourceType}
-            onNext={() => setStep('extract')}
-          />
-        )}
-
-        {step === 'extract' && (
-          <ExtractStep
-            sourceType={sourceType}
-            onExtracted={(data) => {
-              setJobData(data);
-              setStep('review');
-            }}
-            onBack={() => setStep('source')}
-          />
-        )}
-
-        {step === 'review' && jobData && (
-          <ReviewStep
-            data={jobData}
-            sourceType={sourceType}
-            onBack={() => setStep('extract')}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// STEP PILL COMPONENT
-// ============================================================================
-function StepPill({ number, label, active, completed }: any) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
-        active ? 'bg-blue-600 text-white' : 
-        completed ? 'bg-green-600 text-white' :
-        'bg-gray-200 text-gray-500'
-      }`}>
-        {completed ? '✓' : number}
-      </div>
-      <span className={`text-sm font-medium ${active ? 'text-gray-900' : 'text-gray-500'}`}>
-        {label}
-      </span>
-    </div>
-  );
-}
-
-// ============================================================================
-// STEP 1: SOURCE SELECTION (Simplified)
-// ============================================================================
-function SourceStep({ sourceType, setSourceType, onNext }: any) {
-  const sources = [
-    { 
-      value: 'direct_client', 
-      label: 'Direct Client', 
-      icon: Building2, 
-      desc: 'Job from your client company',
-      color: 'blue' 
-    },
-    { 
-      value: 'consultancy', 
-      label: 'Consultancy/Agency', 
-      icon: Users, 
-      desc: 'Job from another agency',
-      color: 'purple' 
-    },
-    { 
-      value: 'job_board', 
-      label: 'Job Board', 
-      icon: Globe, 
-      desc: 'LinkedIn, Indeed, etc.',
-      color: 'green' 
-    }
-  ];
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-900">Where is this job from?</h2>
-        <p className="text-sm text-gray-500 mt-1">This determines what information we'll need</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        {sources.map(({ value, label, icon: Icon, desc, color }) => (
-          <button
-            key={value}
-            onClick={() => setSourceType(value)}
-            className={`p-6 rounded-lg border-2 transition-all text-left ${
-              sourceType === value
-                ? 'border-blue-500 bg-blue-50 shadow-sm'
-                : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-            }`}
-          >
-            <Icon className={`w-8 h-8 mb-3 ${
-              sourceType === value ? 'text-blue-600' : 'text-gray-400'
-            }`} />
-            <div className="font-semibold text-gray-900 mb-1">{label}</div>
-            <div className="text-xs text-gray-500">{desc}</div>
-          </button>
-        ))}
-      </div>
-
-      <button
-        onClick={onNext}
-        disabled={!sourceType}
-        className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium transition-colors"
-      >
-        Continue
-      </button>
-    </div>
-  );
-}
-
-// ============================================================================
-// STEP 2: EXTRACTION (Simplified Input)
-// ============================================================================
-function ExtractStep({ sourceType, onExtracted, onBack }: any) {
-  const [input, setInput] = useState('');
-  const [extracting, setExtracting] = useState(false);
-
-  const handleExtract = async () => {
-    if (!input.trim()) {
-      alert('Please paste job description');
-      return;
-    }
-
-    setExtracting(true);
-    
-    // Simulate AI extraction
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    const extracted = {
-      // Core fields (always present)
-      job_title: 'Senior Full Stack Developer',
-      location: 'Remote (EU)',
-      contract_type: 'freelance',
-      num_positions: 1,
-      
-      // Conditional on source type
-      ...(sourceType === 'direct_client' && {
-        client_id: null, // To be selected
-        client_name: '',
-        client_contact: '',
-        client_email: ''
-      }),
-      
-      ...(sourceType === 'consultancy' && {
-        agency_id: null,
-        agency_name: '',
-        agency_contact: '',
-        agency_email: ''
-      }),
-      
-      // Contract-specific fields
-      duration: '6 months',
-      start_date: 'January 2025',
-      daily_rate: '€600-700',
-      
-      // Skills
-      required_skills: ['React', 'Node.js', 'TypeScript', 'PostgreSQL'],
-      optional_skills: ['AWS', 'Docker'],
-      experience_years: '5+',
-      
-      // Metadata
-      description: input,
-      source_type: sourceType,
-      extracted_at: new Date().toISOString()
-    };
-
-    onExtracted(extracted);
-  };
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-      {/* Header */}
-      <div className="p-6 border-b border-gray-200">
-        <button 
-          onClick={onBack} 
-          className="text-sm text-blue-600 hover:text-blue-700 mb-3 flex items-center gap-1"
-        >
-          ← Change source
-        </button>
-        <h2 className="text-lg font-semibold text-gray-900">Paste Job Description</h2>
-        <p className="text-sm text-gray-500 mt-1">AI will extract key details automatically</p>
-      </div>
-
-      {/* Input */}
-      <div className="p-6">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Paste complete job description here...
-
-Example:
-We are looking for a Senior Full Stack Developer...
-Location: Remote (Belgium/Netherlands)
-Rate: €600-700/day
-Start: January 2025
-..."
-          className="w-full h-80 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
-        />
-        <div className="flex items-center justify-between mt-2">
-          <p className="text-xs text-gray-500">
-            {input.length} characters {input.length < 100 && '(minimum 100)'}
-          </p>
-          {input.length >= 100 && (
-            <span className="text-xs text-green-600 flex items-center gap-1">
-              <CheckCircle className="w-3 h-3" />
-              Ready to extract
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Extract Button */}
-      <div className="p-6 border-t border-gray-200 bg-gray-50">
-        <button
-          onClick={handleExtract}
-          disabled={extracting || input.length < 100}
-          className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed font-medium flex items-center justify-center gap-2 transition-colors"
-        >
-          {extracting ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Extracting with AI...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5" />
-              Extract Job Details
-            </>
-          )}
-        </button>
-
-        {extracting && (
-          <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm text-blue-900">AI is reading the job description... ~2 seconds</p>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Jobs</h1>
+              <p className="text-gray-600 mt-1">
+                Manage all your open positions
+              </p>
+            </div>
+            <button
+              onClick={() => router.push('/jobs/new')}
+              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 shadow-md flex items-center gap-2 font-medium"
+            >
+              <Plus className="w-5 h-5" />
+              Create Job
+            </button>
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
-// ============================================================================
-// STEP 3: REVIEW (Context-Aware Form)
-// ============================================================================
-function ReviewStep({ data, sourceType, onBack }: any) {
-  const [form, setForm] = useState(data);
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    setSaving(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    alert('Job saved successfully!');
-    window.location.href = '/jobs';
-  };
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-      {/* Header with AI Badge */}
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-semibold text-gray-900">Review & Complete</h2>
-          <div className="flex items-center gap-2 px-3 py-1 bg-green-50 border border-green-200 rounded-full">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span className="text-xs font-medium text-green-700">AI Extracted</span>
-          </div>
-        </div>
-        <p className="text-sm text-gray-500">Review details and fill in missing information</p>
-      </div>
-
-      <div className="p-6 space-y-8">
-        {/* SECTION 1: Client/Agency Selection (Context-Dependent) */}
-        {sourceType === 'direct_client' && (
-          <ClientSelector form={form} setForm={setForm} />
-        )}
-
-        {sourceType === 'consultancy' && (
-          <AgencySelector form={form} setForm={setForm} />
-        )}
-
-        {/* SECTION 2: Job Basics (Always) */}
-        <FormSection title="Job Details">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField 
-              label="Job Title" 
-              required
-              value={form.job_title}
-              onChange={(val) => setForm({...form, job_title: val})}
-            />
-            <FormField 
-              label="Location" 
-              required
-              value={form.location}
-              onChange={(val) => setForm({...form, location: val})}
-              placeholder="e.g., Remote, Belgium, Hybrid Brussels"
-            />
-            <FormField 
-              label="Number of Positions" 
-              type="number"
-              value={form.num_positions}
-              onChange={(val) => setForm({...form, num_positions: val})}
-              min={1}
-            />
-            <FormSelect
-              label="Job Category"
-              value={form.job_category || 'it_software'}
-              onChange={(val) => setForm({...form, job_category: val})}
-              options={[
-                { value: 'it_software', label: 'IT & Software' },
-                { value: 'sap', label: 'SAP' },
-                { value: 'data', label: 'Data & Analytics' },
-                { value: 'finance', label: 'Finance' },
-                { value: 'other', label: 'Other' }
-              ]}
-            />
-          </div>
-        </FormSection>
-
-        {/* SECTION 3: Contract (Conditional Fields) */}
-        <FormSection title="Contract Type">
-          <ContractTypeSelector form={form} setForm={setForm} />
-        </FormSection>
-
-        {/* SECTION 4: Skills */}
-        <FormSection title="Skills & Experience">
-          <div className="space-y-4">
-            <SkillTags 
-              label="Required Skills (Must Have)" 
-              skills={form.required_skills || []}
-              onChange={(skills) => setForm({...form, required_skills: skills})}
-              color="red"
-            />
-            <SkillTags 
-              label="Optional Skills (Nice to Have)" 
-              skills={form.optional_skills || []}
-              onChange={(skills) => setForm({...form, optional_skills: skills})}
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <StatCard
+              label="Total Jobs"
+              value={stats.total}
+              icon={Briefcase}
               color="blue"
             />
-            <div className="max-w-xs">
-              <FormField 
-                label="Experience Required" 
-                value={form.experience_years}
-                onChange={(val) => setForm({...form, experience_years: val})}
-                placeholder="e.g., 5+ years, 3-5 years"
+            <StatCard
+              label="Active"
+              value={stats.active}
+              icon={Play}
+              color="green"
+            />
+            <StatCard
+              label="Drafts"
+              value={stats.draft}
+              icon={Edit2}
+              color="yellow"
+            />
+            <StatCard
+              label="Filled"
+              value={stats.filled}
+              icon={CheckCircle}
+              color="purple"
+            />
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="bg-white rounded-xl border shadow-sm p-4 mb-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Search */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search jobs by title or client..."
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
-          </div>
-        </FormSection>
 
-        {/* SECTION 5: Internal (Collapsed by Default) */}
-        <InternalSection form={form} setForm={setForm} />
-      </div>
-
-      {/* Actions */}
-      <div className="p-6 border-t border-gray-200 bg-gray-50 flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="px-5 py-2.5 border border-gray-300 rounded-lg hover:bg-white text-sm font-medium transition-colors"
-        >
-          ← Back
-        </button>
-        <button
-          className="px-5 py-2.5 border border-gray-300 rounded-lg hover:bg-white text-sm font-medium transition-colors"
-        >
-          Save as Draft
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex-1 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 font-medium transition-colors"
-        >
-          {saving ? 'Saving...' : 'Save Job'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// CLIENT SELECTOR (with dropdown + add new)
-// ============================================================================
-function ClientSelector({ form, setForm }: any) {
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showAddNew, setShowAddNew] = useState(false);
-
-  // Mock client database
-  const clients = [
-    { id: '1', name: 'TechCorp Solutions', contact: 'John Smith', email: 'john@techcorp.com' },
-    { id: '2', name: 'DataFlow Inc', contact: 'Sarah Lee', email: 'sarah@dataflow.com' },
-    { id: '3', name: 'CloudTech Systems', contact: 'Mike Johnson', email: 'mike@cloudtech.com' }
-  ];
-
-  const filteredClients = clients.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const selectClient = (client: any) => {
-    setForm({
-      ...form,
-      client_id: client.id,
-      client_name: client.name,
-      client_contact: client.contact,
-      client_email: client.email
-    });
-    setShowDropdown(false);
-    setSearchQuery('');
-  };
-
-  return (
-    <FormSection title="Client Information" icon={Building2}>
-      {!showAddNew ? (
-        <>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Client <span className="text-red-500">*</span>
-          </label>
-          
-          <div className="relative">
-            {!form.client_id ? (
-              <>
-                <button
-                  onClick={() => setShowDropdown(!showDropdown)}
-                  className="w-full p-3 border border-gray-300 rounded-lg text-left flex items-center justify-between hover:border-gray-400 transition-colors"
-                >
-                  <span className="text-gray-500">Search and select client...</span>
-                  <ChevronDown className="w-5 h-5 text-gray-400" />
-                </button>
-
-                {showDropdown && (
-                  <div className="absolute z-10 w-full mt-2 bg-white border border-gray-300 rounded-lg shadow-lg">
-                    <div className="p-2 border-b">
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Type to search..."
-                        className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        autoFocus
-                      />
-                    </div>
-                    <div className="max-h-60 overflow-y-auto">
-                      {filteredClients.map(client => (
-                        <button
-                          key={client.id}
-                          onClick={() => selectClient(client)}
-                          className="w-full p-3 text-left hover:bg-blue-50 border-b last:border-b-0 transition-colors"
-                        >
-                          <div className="font-medium text-sm text-gray-900">{client.name}</div>
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {client.contact} • {client.email}
-                          </div>
-                        </button>
-                      ))}
-                      {filteredClients.length === 0 && (
-                        <div className="p-4 text-center text-sm text-gray-500">
-                          No clients found
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => {
-                        setShowAddNew(true);
-                        setShowDropdown(false);
-                      }}
-                      className="w-full p-3 text-left border-t hover:bg-green-50 text-green-600 font-medium flex items-center gap-2 transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add New Client
-                    </button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="p-4 border border-green-200 bg-green-50 rounded-lg">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="font-semibold text-gray-900">{form.client_name}</div>
-                    <div className="text-sm text-gray-600 mt-1">
-                      {form.client_contact} • {form.client_email}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setForm({...form, client_id: null, client_name: '', client_contact: '', client_email: ''})}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="border border-gray-300 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="font-semibold text-gray-900">Add New Client</h4>
-            <button
-              onClick={() => setShowAddNew(false)}
-              className="text-sm text-gray-500 hover:text-gray-700"
+            {/* Status Filter */}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as JobStatus)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              Cancel
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="draft">Draft</option>
+              <option value="on_hold">On Hold</option>
+              <option value="closed">Closed</option>
+            </select>
+
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-2 rounded ${viewMode === 'grid' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}
+                title="Grid View"
+              >
+                <Grid className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 rounded ${viewMode === 'list' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}
+                title="List View"
+              >
+                <List className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setViewMode('kanban')}
+                className={`p-2 rounded ${viewMode === 'kanban' ? 'bg-white shadow' : 'hover:bg-gray-200'}`}
+                title="Kanban View"
+              >
+                <Trello className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Filters Button */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+            >
+              <Filter className="w-5 h-5" />
+              Filters
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField 
-              label="Company Name" 
-              required
-              value={form.client_name || ''}
-              onChange={(val) => setForm({...form, client_name: val})}
-            />
-            <FormField 
-              label="Contact Person" 
-              required
-              value={form.client_contact || ''}
-              onChange={(val) => setForm({...form, client_contact: val})}
-            />
-            <FormField 
-              label="Email" 
-              type="email"
-              required
-              value={form.client_email || ''}
-              onChange={(val) => setForm({...form, client_email: val})}
-            />
-            <FormField 
-              label="Phone" 
-              value={form.client_phone || ''}
-              onChange={(val) => setForm({...form, client_phone: val})}
-            />
-          </div>
-          <button
-            onClick={() => {
-              // Save logic here
-              setShowAddNew(false);
-            }}
-            className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium"
-          >
-            Save Client
-          </button>
-        </div>
-      )}
-    </FormSection>
-  );
-}
 
-// ============================================================================
-// AGENCY SELECTOR (Similar to Client)
-// ============================================================================
-function AgencySelector({ form, setForm }: any) {
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [showAddNew, setShowAddNew] = useState(false);
-
-  const agencies = [
-    { id: '1', name: 'Randstad Belgium', contact: 'Anna Wilson', email: 'anna@randstad.be' },
-    { id: '2', name: 'Robert Half', contact: 'Tom Brown', email: 'tom@roberthalf.com' }
-  ];
-
-  const selectAgency = (agency: any) => {
-    setForm({
-      ...form,
-      agency_id: agency.id,
-      agency_name: agency.name,
-      agency_contact: agency.contact,
-      agency_email: agency.email
-    });
-    setShowDropdown(false);
-  };
-
-  return (
-    <FormSection title="Agency/Consultancy Information" icon={Users}>
-      {!showAddNew ? (
-        <>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Agency <span className="text-red-500">*</span>
-          </label>
-          
-          {!form.agency_id ? (
-            <div className="relative">
-              <button
-                onClick={() => setShowDropdown(!showDropdown)}
-                className="w-full p-3 border border-gray-300 rounded-lg text-left flex items-center justify-between hover:border-gray-400"
-              >
-                <span className="text-gray-500">Select agency or consultancy...</span>
-                <ChevronDown className="w-5 h-5 text-gray-400" />
-              </button>
-
-              {showDropdown && (
-                <div className="absolute z-10 w-full mt-2 bg-white border border-gray-300 rounded-lg shadow-lg">
-                  <div className="max-h-60 overflow-y-auto">
-                    {agencies.map(agency => (
-                      <button
-                        key={agency.id}
-                        onClick={() => selectAgency(agency)}
-                        className="w-full p-3 text-left hover:bg-purple-50 border-b last:border-b-0"
-                      >
-                        <div className="font-medium text-sm">{agency.name}</div>
-                        <div className="text-xs text-gray-500">{agency.contact} • {agency.email}</div>
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowAddNew(true);
-                      setShowDropdown(false);
-                    }}
-                    className="w-full p-3 text-left border-t hover:bg-green-50 text-green-600 font-medium flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add New Agency
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="p-4 border border-purple-200 bg-purple-50 rounded-lg">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="font-semibold text-gray-900">{form.agency_name}</div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    {form.agency_contact} • {form.agency_email}
-                  </div>
-                </div>
-                <button
-                  onClick={() => setForm({...form, agency_id: null})}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+          {/* Advanced Filters */}
+          {showFilters && (
+            <div className="mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-3 gap-4">
+              <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option>All Clients</option>
+              </select>
+              <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option>All Priorities</option>
+                <option>Urgent</option>
+                <option>High</option>
+                <option>Medium</option>
+                <option>Low</option>
+              </select>
+              <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option>Contract Type</option>
+                <option>Freelance</option>
+                <option>Permanent</option>
+              </select>
             </div>
           )}
-        </>
-      ) : (
-        <div className="border border-gray-300 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="font-semibold text-gray-900">Add New Agency</h4>
-            <button
-              onClick={() => setShowAddNew(false)}
-              className="text-sm text-gray-500 hover:text-gray-700"
-            >
-              Cancel
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="Agency Name" required />
-            <FormField label="Contact Person" required />
-            <FormField label="Email" type="email" required />
-            <FormField label="Phone" />
-          </div>
         </div>
-      )}
-    </FormSection>
-  );
-}
 
-// ============================================================================
-// CONTRACT TYPE SELECTOR (Conditional Fields)
-// ============================================================================
-function ContractTypeSelector({ form, setForm }: any) {
-  const contractTypes = [
-    { value: 'freelance', label: 'Freelance/Contract', icon: Briefcase },
-    { value: 'permanent', label: 'Permanent', icon: Building2 }
-  ];
-
-  return (
-    <div className="space-y-4">
-      {/* Contract Type Selection */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">
-          Contract Type <span className="text-red-500">*</span>
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          {contractTypes.map(({ value, label, icon: Icon }) => (
-            <button
-              key={value}
-              onClick={() => setForm({...form, contract_type: value})}
-              className={`p-4 rounded-lg border-2 flex items-center gap-3 transition-all ${
-                form.contract_type === value
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-300 hover:border-gray-400'
-              }`}
-            >
-              <Icon className={`w-5 h-5 ${
-                form.contract_type === value ? 'text-blue-600' : 'text-gray-400'
-              }`} />
-              <span className="font-medium text-sm">{label}</span>
-            </button>
-          ))}
-        </div>
+        {/* Content */}
+        {loading ? (
+          <LoadingState />
+        ) : filteredJobs.length === 0 ? (
+          <EmptyState
+            hasJobs={jobs.length > 0}
+            onCreateJob={() => router.push('/jobs/new')}
+          />
+        ) : (
+          <>
+            {viewMode === 'grid' && <GridView jobs={filteredJobs} />}
+            {viewMode === 'list' && <ListView jobs={filteredJobs} />}
+            {viewMode === 'kanban' && <KanbanView jobs={filteredJobs} />}
+          </>
+        )}
       </div>
-
-      {/* Conditional Fields */}
-      {form.contract_type === 'freelance' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-          <FormField 
-            label="Duration" 
-            value={form.duration}
-            onChange={(val) => setForm({...form, duration: val})}
-            placeholder="e.g., 6 months"
-          />
-          <FormField 
-            label="Start Date" 
-            value={form.start_date}
-            onChange={(val) => setForm({...form, start_date: val})}
-            placeholder="e.g., ASAP, Jan 2025"
-          />
-          <FormField 
-            label="Daily Rate" 
-            value={form.daily_rate}
-            onChange={(val) => setForm({...form, daily_rate: val})}
-            placeholder="e.g., €600-700"
-          />
-        </div>
-      )}
-
-      {form.contract_type === 'permanent' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-          <FormField 
-            label="Start Date" 
-            value={form.start_date}
-            onChange={(val) => setForm({...form, start_date: val})}
-            placeholder="e.g., ASAP, February 2025"
-          />
-          <FormField 
-            label="Annual Salary" 
-            value={form.annual_salary}
-            onChange={(val) => setForm({...form, annual_salary: val})}
-            placeholder="e.g., €50,000-60,000"
-          />
-        </div>
-      )}
     </div>
   );
 }
 
-// ============================================================================
-// SKILL TAGS COMPONENT
-// ============================================================================
-function SkillTags({ label, skills, onChange, color }: any) {
-  const [newSkill, setNewSkill] = useState('');
-
-  const addSkill = () => {
-    if (newSkill.trim() && !skills.includes(newSkill.trim())) {
-      onChange([...skills, newSkill.trim()]);
-      setNewSkill('');
-    }
-  };
-
-  const removeSkill = (skillToRemove: string) => {
-    onChange(skills.filter((s: string) => s !== skillToRemove));
-  };
-
-  const colorClasses = {
-    red: 'bg-red-100 text-red-800 border-red-200',
-    blue: 'bg-blue-100 text-blue-800 border-blue-200'
-  };
+// Grid View Component
+function GridView({ jobs }: { jobs: Job[] }) {
+  const router = useRouter();
 
   return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
-      
-      <div className="flex flex-wrap gap-2 mb-3">
-        {skills.map((skill: string, idx: number) => (
-          <span
-            key={idx}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium border flex items-center gap-2 ${colorClasses[color]}`}
-          >
-            {skill}
-            <button
-              onClick={() => removeSkill(skill)}
-              className="hover:opacity-70"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </span>
-        ))}
-      </div>
-
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={newSkill}
-          onChange={(e) => setNewSkill(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
-          placeholder="Type skill and press Enter"
-          className="flex-1 p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
-        <button
-          onClick={addSkill}
-          className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors"
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {jobs.map((job) => (
+        <div
+          key={job.id}
+          onClick={() => router.push(`/jobs/${job.id}`)}
+          className="bg-white rounded-xl border shadow-sm p-5 hover:shadow-md transition-shadow cursor-pointer"
         >
-          Add
-        </button>
+          {/* Header */}
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex-1">
+              <h3 className="font-semibold text-lg text-gray-900 mb-1 line-clamp-1">
+                {job.title}
+              </h3>
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <Building2 className="w-4 h-4" />
+                <span className="truncate">{job.client.name}</span>
+              </div>
+            </div>
+            <StatusBadge status={job.status} />
+          </div>
+
+          {/* Quick Info */}
+          <div className="grid grid-cols-2 gap-2 mb-3 text-xs text-gray-600">
+            <div className="flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              <span className="truncate">{job.location}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <DollarSign className="w-3 h-3" />
+              <span className="truncate">{job.rate_range || job.salary_range}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              <span>{job.filled_positions}/{job.num_positions} filled</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Target className="w-3 h-3" />
+              <span>{job.candidates_count} candidates</span>
+            </div>
+          </div>
+
+          {/* Progress */}
+          <div className="mb-3">
+            <div className="flex justify-between text-xs text-gray-600 mb-1">
+              <span>Progress</span>
+              <span className="font-semibold">{Math.round((job.filled_positions / job.num_positions) * 100)}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full"
+                style={{ width: `${(job.filled_positions / job.num_positions) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between pt-3 border-t text-xs">
+            <div className="flex items-center gap-1 text-gray-500">
+              <Clock className="w-3 h-3" />
+              <span>{new Date(job.created_at).toLocaleDateString()}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <TrendingUp className={`w-4 h-4 ${
+                job.health_score >= 70 ? 'text-green-600' : 
+                job.health_score >= 40 ? 'text-yellow-600' : 'text-red-600'
+              }`} />
+              <span className="font-semibold text-gray-900">{job.health_score}%</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// List View Component
+function ListView({ jobs }: { jobs: Job[] }) {
+  const router = useRouter();
+
+  return (
+    <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+      <table className="w-full">
+        <thead className="bg-gray-50 border-b">
+          <tr>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Job Title</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Client</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Progress</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Candidates</th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Health</th>
+            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {jobs.map((job) => (
+            <tr
+              key={job.id}
+              onClick={() => router.push(`/jobs/${job.id}`)}
+              className="hover:bg-gray-50 cursor-pointer"
+            >
+              <td className="px-4 py-3">
+                <div className="font-medium text-gray-900">{job.title}</div>
+                <div className="text-xs text-gray-500">{job.location}</div>
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-700">{job.client.name}</td>
+              <td className="px-4 py-3">
+                <StatusBadge status={job.status} />
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full"
+                      style={{ width: `${(job.filled_positions / job.num_positions) * 100}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs text-gray-600">{job.filled_positions}/{job.num_positions}</span>
+                </div>
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-700">{job.candidates_count}</td>
+              <td className="px-4 py-3">
+                <span className={`text-sm font-semibold ${
+                  job.health_score >= 70 ? 'text-green-600' :
+                  job.health_score >= 40 ? 'text-yellow-600' : 'text-red-600'
+                }`}>
+                  {job.health_score}%
+                </span>
+              </td>
+              <td className="px-4 py-3 text-right">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Actions menu
+                  }}
+                  className="p-1 hover:bg-gray-200 rounded"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Kanban View Component
+function KanbanView({ jobs }: { jobs: Job[] }) {
+  const statuses = ['active', 'draft', 'on_hold', 'closed'] as const;
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {statuses.map((status) => {
+        const statusJobs = jobs.filter(j => j.status === status);
+        return (
+          <div key={status} className="bg-gray-100 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 capitalize">{status.replace('_', ' ')}</h3>
+              <span className="px-2 py-1 bg-white rounded-full text-xs font-semibold text-gray-700">
+                {statusJobs.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {statusJobs.map((job) => (
+                <KanbanCard key={job.id} job={job} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function KanbanCard({ job }: { job: Job }) {
+  const router = useRouter();
+
+  return (
+    <div
+      onClick={() => router.push(`/jobs/${job.id}`)}
+      className="bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer border border-gray-200"
+    >
+      <h4 className="font-medium text-sm text-gray-900 mb-2 line-clamp-2">{job.title}</h4>
+      <div className="text-xs text-gray-600 mb-2">{job.client.name}</div>
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-gray-500">{job.filled_positions}/{job.num_positions}</span>
+        <span className={`font-semibold ${
+          job.health_score >= 70 ? 'text-green-600' :
+          job.health_score >= 40 ? 'text-yellow-600' : 'text-red-600'
+        }`}>
+          {job.health_score}%
+        </span>
       </div>
     </div>
   );
 }
 
-// ============================================================================
-// INTERNAL SECTION (Collapsible)
-// ============================================================================
-function InternalSection({ form, setForm }: any) {
-  const [expanded, setExpanded] = useState(false);
+// Helper Components
+function StatCard({ label, value, icon: Icon, color }: any) {
+  const colors = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-200',
+    green: 'bg-green-50 text-green-600 border-green-200',
+    yellow: 'bg-yellow-50 text-yellow-600 border-yellow-200',
+    purple: 'bg-purple-50 text-purple-600 border-purple-200'
+  };
 
   return (
-    <div className="border border-gray-300 rounded-lg overflow-hidden">
+    <div className="bg-white rounded-xl border shadow-sm p-4">
+      <div className="flex items-center gap-3">
+        <div className={`p-2 rounded-lg ${colors[color]}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div>
+          <div className="text-2xl font-bold text-gray-900">{value}</div>
+          <div className="text-sm text-gray-600">{label}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: Job['status'] }) {
+  const config = {
+    active: { label: 'Active', color: 'bg-green-100 text-green-700 border-green-300' },
+    draft: { label: 'Draft', color: 'bg-gray-100 text-gray-700 border-gray-300' },
+    on_hold: { label: 'On Hold', color: 'bg-yellow-100 text-yellow-700 border-yellow-300' },
+    closed: { label: 'Closed', color: 'bg-blue-100 text-blue-700 border-blue-300' }
+  };
+
+  const { label, color } = config[status];
+
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs font-medium border ${color}`}>
+      {label}
+    </span>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="flex items-center justify-center py-20">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading jobs...</p>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ hasJobs, onCreateJob }: { hasJobs: boolean; onCreateJob: () => void }) {
+  return (
+    <div className="bg-white rounded-xl border shadow-sm p-16 text-center">
+      <Briefcase className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+      <h3 className="text-xl font-bold text-gray-900 mb-2">
+        {hasJobs ? 'No jobs match your filters' : 'No jobs yet'}
+      </h3>
+      <p className="text-gray-600 mb-6">
+        {hasJobs ? 'Try adjusting your search or filters' : 'Create your first job to start recruiting'}
+      </p>
       <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full p-4 bg-gray-50 hover:bg-gray-100 flex items-center justify-between transition-colors"
+        onClick={onCreateJob}
+        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
       >
-        <div className="flex items-center gap-2">
-          <Tag className="w-5 h-5 text-gray-600" />
-          <span className="font-semibold text-gray-900">Internal Settings</span>
-          <span className="text-xs text-gray-500">(Optional)</span>
-        </div>
-        <ChevronDown className={`w-5 h-5 text-gray-600 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        <Plus className="w-5 h-5 inline mr-2" />
+        Create First Job
       </button>
-
-      {expanded && (
-        <div className="p-4 space-y-4 border-t">
-          <div className="grid grid-cols-2 gap-4">
-            <FormSelect
-              label="Priority"
-              value={form.priority || 'medium'}
-              onChange={(val) => setForm({...form, priority: val})}
-              options={[
-                { value: 'low', label: '🟢 Low' },
-                { value: 'medium', label: '🟡 Medium' },
-                { value: 'high', label: '🔴 High' }
-              ]}
-            />
-            <FormSelect
-              label="Assign To"
-              value={form.assigned_to || ''}
-              onChange={(val) => setForm({...form, assigned_to: val})}
-              options={[
-                { value: '', label: 'Unassigned' },
-                { value: 'team_it', label: 'IT Team' },
-                { value: 'sarah', label: 'Sarah Johnson' },
-                { value: 'mike', label: 'Mike Thompson' }
-              ]}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Internal Notes</label>
-            <textarea
-              value={form.internal_notes || ''}
-              onChange={(e) => setForm({...form, internal_notes: e.target.value})}
-              placeholder="Private notes for internal team..."
-              className="w-full p-3 border border-gray-300 rounded-lg text-sm"
-              rows={3}
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================================
-// REUSABLE FORM COMPONENTS
-// ============================================================================
-function FormSection({ title, icon: Icon, children }: any) {
-  return (
-    <section className="pb-6 border-b border-gray-200 last:border-b-0">
-      <div className="flex items-center gap-2 mb-4">
-        {Icon && <Icon className="w-5 h-5 text-gray-600" />}
-        <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function FormField({ label, value, onChange, type = 'text', required = false, placeholder = '', min }: any) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      <input
-        type={type}
-        value={value || ''}
-        onChange={(e) => onChange?.(e.target.value)}
-        placeholder={placeholder}
-        min={min}
-        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-      />
-    </div>
-  );
-}
-
-function FormSelect({ label, value, onChange, options, required = false }: any) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-      >
-        {options.map((opt: any) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }

@@ -4,7 +4,7 @@
 output_file="test.txt"
 
 # Folders to include (relative to current directory)
-include_dirs=("src" "data" "scripts" "database" "config" "public")
+include_dirs=("src/app" "src/components" "scripts" "database" "config" "public")
 
 # Specific files in the current directory to include
 include_files=(
@@ -14,7 +14,6 @@ include_files=(
   "postcss.config.js"
   "tailwind.config.js"
   "tsconfig.json"
-  ".env.local"
   "setup-talentpulse.sh"
   "middleware.js"
 )

@@ -1,769 +1,898 @@
-import React, { useState } from 'react';
-import { 
-  Building2, Briefcase, MapPin, DollarSign, Calendar, 
-  Users, Sparkles, Save, X, Plus, AlertCircle, CheckCircle,
-  Loader2, Globe, Clock, Target
+// src/app/jobs/new/page.tsx
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Building2, Sparkles, ChevronRight, ChevronLeft, Check,
+  MapPin, DollarSign, Calendar, Users, Briefcase, Globe,
+  Plus, X, Loader2, AlertCircle
 } from 'lucide-react';
 
-// Types
-interface Client {
-  id: string;
-  company_name: string;
-  country: string;
-  contact_person: string;
-  contact_email: string;
-  contact_phone: string;
-  industry: string;
-  website: string;
-  notes: string;
-}
+type Step = 'source' | 'details' | 'requirements';
 
 interface JobFormData {
+  // Step 1: Source
+  source_type: 'direct_client' | 'consultancy' | 'job_board' | '';
   client_id: string;
+  client_name: string;
+  client_contact: string;
+  client_email: string;
+  agency_id: string;
+  agency_name: string;
+  
+  // Step 2: Details
+  job_title: string;
+  location: string;
   country: string;
-  job_description: string;
-  duration_months: number;
-  daily_rate: number;
-  currency: string;
+  contract_type: 'freelance' | 'permanent' | '';
+  num_positions: number;
+  duration: string;
   start_date: string;
-  positions_needed: number;
-  source: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  assigned_to: string[];
-  assigned_team_id: string;
-  internal_notes: string;
+  daily_rate: string;
+  annual_salary: string;
+  currency: string;
+  job_description: string;
   
-  // AI-extracted fields (auto-populated)
-  title: string;
+  // Step 3: Requirements
   required_skills: string[];
-  experience_level: string;
-  years_experience: string;
+  optional_skills: string[];
+  experience_years: string;
+  education_level: string;
+  certifications: string[];
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  assigned_to: string;
+  internal_notes: string;
 }
 
-// Main Component
-export default function JobManagementSystem() {
-  const [activeView, setActiveView] = useState<'job' | 'client'>('job');
-  const [showClientModal, setShowClientModal] = useState(false);
-  
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 md:p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header with Toggle */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">Job Management</h1>
-          
-          <div className="flex gap-2 bg-white p-1 rounded-lg shadow-sm w-fit">
-            <button
-              onClick={() => setActiveView('job')}
-              className={`px-6 py-2 rounded-md font-medium transition-all ${
-                activeView === 'job'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <Briefcase className="w-4 h-4 inline mr-2" />
-              Create Job
-            </button>
-            <button
-              onClick={() => setActiveView('client')}
-              className={`px-6 py-2 rounded-md font-medium transition-all ${
-                activeView === 'client'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              <Building2 className="w-4 h-4 inline mr-2" />
-              Manage Clients
-            </button>
-          </div>
-        </div>
+const INITIAL_FORM_DATA: JobFormData = {
+  source_type: '',
+  client_id: '',
+  client_name: '',
+  client_contact: '',
+  client_email: '',
+  agency_id: '',
+  agency_name: '',
+  job_title: '',
+  location: '',
+  country: '',
+  contract_type: '',
+  num_positions: 1,
+  duration: '',
+  start_date: '',
+  daily_rate: '',
+  annual_salary: '',
+  currency: 'EUR',
+  job_description: '',
+  required_skills: [],
+  optional_skills: [],
+  experience_years: '',
+  education_level: '',
+  certifications: [],
+  priority: 'medium',
+  assigned_to: '',
+  internal_notes: ''
+};
 
-        {/* Content */}
-        {activeView === 'job' ? (
-          <JobCreationForm onClientAdd={() => setShowClientModal(true)} />
-        ) : (
-          <ClientManagement />
-        )}
-
-        {/* Quick Add Client Modal */}
-        {showClientModal && (
-          <QuickAddClientModal onClose={() => setShowClientModal(false)} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Job Creation Form Component
-function JobCreationForm({ onClientAdd }: { onClientAdd: () => void }) {
-  const [formData, setFormData] = useState<JobFormData>({
-    client_id: '',
-    country: '',
-    job_description: '',
-    duration_months: 6,
-    daily_rate: 0,
-    currency: 'EUR',
-    start_date: 'ASAP',
-    positions_needed: 1,
-    source: '',
-    priority: 'medium',
-    assigned_to: [],
-    assigned_team_id: '',
-    internal_notes: '',
-    // AI-extracted
-    title: '',
-    required_skills: [],
-    experience_level: '',
-    years_experience: ''
-  });
-
-  const [aiProcessing, setAiProcessing] = useState(false);
-  const [aiExtracted, setAiExtracted] = useState(false);
+export default function JobCreationWizard() {
+  const router = useRouter();
+  const [currentStep, setCurrentStep] = useState<Step>('source');
+  const [formData, setFormData] = useState<JobFormData>(INITIAL_FORM_DATA);
   const [saving, setSaving] = useState(false);
-  const [clients, setClients] = useState<Client[]>([
-    { id: '1', company_name: 'Acme Corp', country: 'Belgium', contact_person: 'John Doe', 
-      contact_email: 'john@acme.com', contact_phone: '+32 2 123 4567', 
-      industry: 'Technology', website: 'acme.com', notes: 'Key client' }
-  ]);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Countries list (European focus)
-  const countries = [
-    'Belgium', 'Netherlands', 'Luxembourg', 'Germany', 'France',
-    'United Kingdom', 'Spain', 'Italy', 'Poland', 'Remote/Any'
+  const steps = [
+    { key: 'source', label: 'Source', icon: Building2 },
+    { key: 'details', label: 'Job Details', icon: Briefcase },
+    { key: 'requirements', label: 'Requirements', icon: Users }
   ];
 
-  const currencies = ['EUR', 'USD', 'GBP', 'CHF'];
+  const currentStepIndex = steps.findIndex(s => s.key === currentStep);
 
-  // AI Extract from Job Description
-  const handleAIExtract = async () => {
-    if (!formData.job_description || formData.job_description.length < 100) {
-      alert('Please enter at least 100 characters in job description');
-      return;
+  const validateStep = (step: Step): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (step === 'source') {
+      if (!formData.source_type) {
+        newErrors.source_type = 'Please select a source';
+      }
+      if (formData.source_type === 'direct_client' && !formData.client_id && !formData.client_name) {
+        newErrors.client = 'Please select or add a client';
+      }
+      if (formData.source_type === 'consultancy' && !formData.agency_id && !formData.agency_name) {
+        newErrors.agency = 'Please select or add an agency';
+      }
     }
 
-    setAiProcessing(true);
-    
-    try {
-      // Simulate AI extraction (replace with actual API call)
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Mock AI extracted data
-      const extracted = {
-        title: 'Senior Full Stack Developer',
-        required_skills: ['React', 'Node.js', 'TypeScript', 'PostgreSQL', 'AWS'],
-        experience_level: 'Senior',
-        years_experience: '5-7 years'
-      };
-      
-      setFormData(prev => ({
-        ...prev,
-        ...extracted
-      }));
-      
-      setAiExtracted(true);
-    } catch (error) {
-      alert('AI extraction failed. Please fill manually.');
-    } finally {
-      setAiProcessing(false);
+    if (step === 'details') {
+      if (!formData.job_title) newErrors.job_title = 'Job title is required';
+      if (!formData.location) newErrors.location = 'Location is required';
+      if (!formData.contract_type) newErrors.contract_type = 'Contract type is required';
+      if (!formData.job_description || formData.job_description.length < 100) {
+        newErrors.job_description = 'Job description must be at least 100 characters';
+      }
+    }
+
+    if (step === 'requirements') {
+      if (formData.required_skills.length === 0) {
+        newErrors.required_skills = 'Add at least one required skill';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleNext = () => {
+    if (validateStep(currentStep)) {
+      const nextIndex = currentStepIndex + 1;
+      if (nextIndex < steps.length) {
+        setCurrentStep(steps[nextIndex].key as Step);
+      }
     }
   };
 
-  // Handle Save
-  const handleSave = async () => {
-    // Validation
-    if (!formData.client_id) {
-      alert('Please select a client');
-      return;
+  const handleBack = () => {
+    const prevIndex = currentStepIndex - 1;
+    if (prevIndex >= 0) {
+      setCurrentStep(steps[prevIndex].key as Step);
     }
-    if (!formData.country) {
-      alert('Please select a country');
-      return;
-    }
-    if (!formData.job_description) {
-      alert('Please enter job description');
-      return;
-    }
+  };
+
+  const handleSubmit = async () => {
+    if (!validateStep('requirements')) return;
 
     setSaving(true);
-    
     try {
-      // API call to save job
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // API call will go here
+      // const response = await fetch('/api/jobs', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(formData)
+      // });
       
-      alert('Job created successfully!');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API
       
-      // Reset form
-      setFormData({
-        client_id: '',
-        country: '',
-        job_description: '',
-        duration_months: 6,
-        daily_rate: 0,
-        currency: 'EUR',
-        start_date: 'ASAP',
-        positions_needed: 1,
-        source: '',
-        priority: 'medium',
-        assigned_to: [],
-        assigned_team_id: '',
-        internal_notes: '',
-        title: '',
-        required_skills: [],
-        experience_level: '',
-        years_experience: ''
-      });
-      setAiExtracted(false);
+      router.push('/jobs');
     } catch (error) {
-      alert('Failed to create job');
+      alert('Failed to create job. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 md:p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Create New Job</h2>
-        <div className="flex gap-2">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
           <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            onClick={() => router.push('/jobs')}
+            className="text-sm text-gray-600 hover:text-gray-900 mb-4 flex items-center gap-1"
           >
-            <X className="w-4 h-4 inline mr-2" />
-            Cancel
+            <ChevronLeft className="w-4 h-4" />
+            Back to Jobs
           </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50"
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 inline mr-2 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4 inline mr-2" />
+          <h1 className="text-3xl font-bold text-gray-900">Create New Job</h1>
+          <p className="text-gray-600 mt-1">Complete the form to add a new position</p>
+        </div>
+
+        {/* Progress Steps */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              const isCompleted = index < currentStepIndex;
+              const isCurrent = index === currentStepIndex;
+
+              return (
+                <div key={step.key} className="flex items-center flex-1">
+                  <div className="flex flex-col items-center">
+                    <div
+                      className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-colors ${
+                        isCompleted
+                          ? 'bg-green-600 border-green-600 text-white'
+                          : isCurrent
+                          ? 'bg-blue-600 border-blue-600 text-white'
+                          : 'bg-white border-gray-300 text-gray-400'
+                      }`}
+                    >
+                      {isCompleted ? (
+                        <Check className="w-6 h-6" />
+                      ) : (
+                        <Icon className="w-6 h-6" />
+                      )}
+                    </div>
+                    <span
+                      className={`text-sm font-medium mt-2 ${
+                        isCurrent ? 'text-gray-900' : 'text-gray-500'
+                      }`}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                  {index < steps.length - 1 && (
+                    <div
+                      className={`flex-1 h-0.5 mx-4 ${
+                        isCompleted ? 'bg-green-600' : 'bg-gray-300'
+                      }`}
+                    ></div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Form Content */}
+        <div className="bg-white rounded-xl shadow-lg border">
+          <div className="p-6 md:p-8">
+            {currentStep === 'source' && (
+              <SourceStep formData={formData} setFormData={setFormData} errors={errors} />
             )}
-            Create Job
-          </button>
+            {currentStep === 'details' && (
+              <DetailsStep formData={formData} setFormData={setFormData} errors={errors} />
+            )}
+            {currentStep === 'requirements' && (
+              <RequirementsStep formData={formData} setFormData={setFormData} errors={errors} />
+            )}
+          </div>
+
+          {/* Navigation */}
+          <div className="p-6 bg-gray-50 border-t flex items-center justify-between">
+            <button
+              onClick={handleBack}
+              disabled={currentStepIndex === 0}
+              className="px-5 py-2.5 border border-gray-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center gap-2"
+            >
+              <ChevronLeft className="w-5 h-5" />
+              Back
+            </button>
+
+            {currentStepIndex < steps.length - 1 ? (
+              <button
+                onClick={handleNext}
+                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center gap-2"
+              >
+                Continue
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={saving}
+                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 font-medium flex items-center gap-2"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-5 h-5" />
+                    Create Job
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="space-y-8">
-        {/* Basic Information */}
-        <section>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <Building2 className="w-5 h-5 mr-2 text-blue-600" />
-            Basic Information
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Client Selection */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Client <span className="text-red-500">*</span>
-              </label>
-              <div className="flex gap-2">
-                <select
-                  value={formData.client_id}
-                  onChange={(e) => setFormData(prev => ({ ...prev, client_id: e.target.value }))}
-                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select client...</option>
-                  {clients.map(client => (
-                    <option key={client.id} value={client.id}>
-                      {client.company_name} - {client.country}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={onClientAdd}
-                  className="px-4 py-3 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add New
-                </button>
-              </div>
-            </div>
+// Step 1: Source Selection
+function SourceStep({ formData, setFormData, errors }: any) {
+  const [showClientForm, setShowClientForm] = useState(false);
+  const [showAgencyForm, setShowAgencyForm] = useState(false);
 
-            {/* Country */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Country <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <select
-                  value={formData.country}
-                  onChange={(e) => setFormData(prev => ({ ...prev, country: e.target.value }))}
-                  className="w-full pl-10 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select country...</option>
-                  {countries.map(country => (
-                    <option key={country} value={country}>{country}</option>
-                  ))}
-                </select>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Where the position is located (can be different from client location)
-              </p>
-            </div>
+  const sources = [
+    {
+      value: 'direct_client',
+      label: 'Direct Client',
+      icon: Building2,
+      description: 'Job from your client company'
+    },
+    {
+      value: 'consultancy',
+      label: 'Consultancy/Agency',
+      icon: Users,
+      description: 'Job from another agency'
+    },
+    {
+      value: 'job_board',
+      label: 'Job Board',
+      icon: Globe,
+      description: 'LinkedIn, Indeed, etc.'
+    }
+  ];
 
-            {/* Source */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Source
-              </label>
-              <input
-                type="text"
-                value={formData.source}
-                onChange={(e) => setFormData(prev => ({ ...prev, source: e.target.value }))}
-                placeholder="e.g., Client email, Portal XYZ"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Where did this job come from?
-              </p>
-            </div>
-          </div>
-        </section>
+  // Mock data - will be replaced with API
+  const mockClients = [
+    { id: '1', name: 'TechCorp Solutions', contact: 'John Smith', email: 'john@tech.com' },
+    { id: '2', name: 'DataFlow Inc', contact: 'Sarah Lee', email: 'sarah@data.com' }
+  ];
 
-        {/* Contract Details */}
-        <section className="border-t pt-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <DollarSign className="w-5 h-5 mr-2 text-green-600" />
-            Contract Details
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Duration */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Duration (months)
-              </label>
-              <input
-                type="number"
-                value={formData.duration_months}
-                onChange={(e) => setFormData(prev => ({ ...prev, duration_months: parseInt(e.target.value) }))}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                min="1"
-                max="60"
-              />
-            </div>
+  const mockAgencies = [
+    { id: '1', name: 'Randstad Belgium', contact: 'Anna Wilson', email: 'anna@randstad.be' }
+  ];
 
-            {/* Daily Rate */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Daily Rate (optional)
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={formData.daily_rate || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, daily_rate: parseFloat(e.target.value) }))}
-                  placeholder="500"
-                  className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <select
-                  value={formData.currency}
-                  onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
-                  className="w-24 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  {currencies.map(curr => (
-                    <option key={curr} value={curr}>{curr}</option>
-                  ))}
-                </select>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                What client mentioned (if shared)
-              </p>
-            </div>
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Where is this job from?</h2>
+        <p className="text-gray-600">Select the source to determine required information</p>
+      </div>
 
-            {/* Start Date */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Start Date
-              </label>
-              <input
-                type="text"
-                value={formData.start_date}
-                onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
-                placeholder="ASAP, January 2025, Q1 2025"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          {/* Positions Needed */}
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Positions Needed
-            </label>
-            <input
-              type="number"
-              value={formData.positions_needed}
-              onChange={(e) => setFormData(prev => ({ ...prev, positions_needed: parseInt(e.target.value) }))}
-              className="w-full md:w-48 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              min="1"
+      {/* Source Type Selection */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {sources.map(({ value, label, icon: Icon, description }) => (
+          <button
+            key={value}
+            onClick={() => setFormData({ ...formData, source_type: value })}
+            className={`p-6 rounded-lg border-2 text-left transition-all ${
+              formData.source_type === value
+                ? 'border-blue-500 bg-blue-50 shadow-md'
+                : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+            }`}
+          >
+            <Icon
+              className={`w-8 h-8 mb-3 ${
+                formData.source_type === value ? 'text-blue-600' : 'text-gray-400'
+              }`}
             />
-          </div>
-        </section>
+            <div className="font-semibold text-gray-900 mb-1">{label}</div>
+            <div className="text-sm text-gray-600">{description}</div>
+          </button>
+        ))}
+      </div>
+      {errors.source_type && <ErrorMessage message={errors.source_type} />}
 
-        {/* Job Description with AI */}
-        <section className="border-t pt-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-              <Sparkles className="w-5 h-5 mr-2 text-purple-600" />
-              Job Description <span className="text-red-500 ml-1">*</span>
-            </h3>
-            <button
-              onClick={handleAIExtract}
-              disabled={aiProcessing || formData.job_description.length < 100}
-              className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 flex items-center gap-2"
-            >
-              {aiProcessing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  AI Analyzing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  AI Extract Info
-                </>
-              )}
-            </button>
-          </div>
-
-          <textarea
-            value={formData.job_description}
-            onChange={(e) => setFormData(prev => ({ ...prev, job_description: e.target.value }))}
-            placeholder="Paste the complete job description here...
-
-We're looking for a Senior Full-Stack Developer with 5+ years experience in React, Node.js, and PostgreSQL. Must have experience with AWS, Docker, and CI/CD pipelines. Strong communication skills required."
-            className="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-sm resize-none"
-          />
+      {/* Client Selection */}
+      {formData.source_type === 'direct_client' && (
+        <div className="border border-gray-300 rounded-lg p-6 bg-gray-50">
+          <h3 className="font-semibold text-gray-900 mb-4">Select Client</h3>
           
-          <div className="flex items-center justify-between mt-2">
-            <span className={`text-sm ${formData.job_description.length >= 100 ? 'text-green-600' : 'text-gray-500'}`}>
-              {formData.job_description.length} characters
-              {formData.job_description.length < 100 && ' (minimum 100 required for AI extraction)'}
-            </span>
-            {aiExtracted && (
-              <span className="text-sm text-green-600 flex items-center gap-1">
-                <CheckCircle className="w-4 h-4" />
-                AI extracted successfully
-              </span>
-            )}
-          </div>
-
-          {/* AI Extracted Fields */}
-          {aiExtracted && (
-            <div className="mt-6 p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg border border-purple-200">
-              <h4 className="font-semibold text-gray-900 mb-4 flex items-center">
-                <Sparkles className="w-4 h-4 mr-2 text-purple-600" />
-                AI Extracted Information (Review & Edit)
-              </h4>
+          {!showClientForm ? (
+            <div className="space-y-3">
+              {mockClients.map((client) => (
+                <button
+                  key={client.id}
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      client_id: client.id,
+                      client_name: client.name,
+                      client_contact: client.contact,
+                      client_email: client.email
+                    })
+                  }
+                  className={`w-full p-4 text-left rounded-lg border-2 transition-all ${
+                    formData.client_id === client.id
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <div className="font-medium text-gray-900">{client.name}</div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    {client.contact} • {client.email}
+                  </div>
+                </button>
+              ))}
               
-              <div className="space-y-4">
-                {/* Job Title */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Job Title
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
-                  />
-                </div>
-
-                {/* Required Skills */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Required Skills
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {formData.required_skills.map((skill, idx) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm flex items-center gap-2"
-                      >
-                        {skill}
-                        <button
-                          onClick={() => setFormData(prev => ({
-                            ...prev,
-                            required_skills: prev.required_skills.filter((_, i) => i !== idx)
-                          }))}
-                          className="hover:text-blue-900"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                    <button
-                      onClick={() => {
-                        const skill = prompt('Add skill:');
-                        if (skill) {
-                          setFormData(prev => ({
-                            ...prev,
-                            required_skills: [...prev.required_skills, skill]
-                          }));
-                        }
-                      }}
-                      className="px-3 py-1 border-2 border-dashed border-gray-300 rounded-full text-sm hover:border-blue-400 hover:text-blue-600"
-                    >
-                      <Plus className="w-3 h-3 inline mr-1" />
-                      Add Skill
-                    </button>
-                  </div>
-                </div>
-
-                {/* Experience Level & Years */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Experience Level
-                    </label>
-                    <select
-                      value={formData.experience_level}
-                      onChange={(e) => setFormData(prev => ({ ...prev, experience_level: e.target.value }))}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
-                    >
-                      <option value="">Select level...</option>
-                      <option value="Junior">Junior</option>
-                      <option value="Mid">Mid-level</option>
-                      <option value="Senior">Senior</option>
-                      <option value="Lead">Lead</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Years of Experience
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.years_experience}
-                      onChange={(e) => setFormData(prev => ({ ...prev, years_experience: e.target.value }))}
-                      placeholder="e.g., 5-7 years"
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
-                    />
-                  </div>
-                </div>
+              <button
+                onClick={() => setShowClientForm(true)}
+                className="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 text-blue-600 font-medium flex items-center justify-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Add New Client
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <FormField
+                label="Company Name"
+                required
+                value={formData.client_name}
+                onChange={(val: string) => setFormData({ ...formData, client_name: val })}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  label="Contact Person"
+                  value={formData.client_contact}
+                  onChange={(val: string) => setFormData({ ...formData, client_contact: val })}
+                />
+                <FormField
+                  label="Email"
+                  type="email"
+                  value={formData.client_email}
+                  onChange={(val: string) => setFormData({ ...formData, client_email: val })}
+                />
               </div>
+              <button
+                onClick={() => setShowClientForm(false)}
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                ← Back to client list
+              </button>
             </div>
           )}
-        </section>
+          {errors.client && <ErrorMessage message={errors.client} />}
+        </div>
+      )}
 
-        {/* Assignment & Priority */}
-        <section className="border-t pt-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <Users className="w-5 h-5 mr-2 text-indigo-600" />
-            Assignment & Priority
-          </h3>
+      {/* Agency Selection */}
+      {formData.source_type === 'consultancy' && (
+        <div className="border border-gray-300 rounded-lg p-6 bg-gray-50">
+          <h3 className="font-semibold text-gray-900 mb-4">Select Agency</h3>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Priority */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Priority
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {['low', 'medium', 'high', 'urgent'].map(priority => (
-                  <button
-                    key={priority}
-                    onClick={() => setFormData(prev => ({ ...prev, priority: priority as any }))}
-                    className={`p-3 rounded-lg font-medium capitalize transition-all ${
-                      formData.priority === priority
-                        ? priority === 'urgent' ? 'bg-red-600 text-white' :
-                          priority === 'high' ? 'bg-orange-600 text-white' :
-                          priority === 'medium' ? 'bg-blue-600 text-white' :
-                          'bg-gray-600 text-white'
-                        : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {priority}
-                  </button>
-                ))}
-              </div>
+          {!showAgencyForm ? (
+            <div className="space-y-3">
+              {mockAgencies.map((agency) => (
+                <button
+                  key={agency.id}
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      agency_id: agency.id,
+                      agency_name: agency.name
+                    })
+                  }
+                  className={`w-full p-4 text-left rounded-lg border-2 transition-all ${
+                    formData.agency_id === agency.id
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <div className="font-medium text-gray-900">{agency.name}</div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    {agency.contact} • {agency.email}
+                  </div>
+                </button>
+              ))}
+              
+              <button
+                onClick={() => setShowAgencyForm(true)}
+                className="w-full p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-400 hover:bg-purple-50 text-purple-600 font-medium flex items-center justify-center gap-2"
+              >
+                <Plus className="w-5 h-5" />
+                Add New Agency
+              </button>
             </div>
-
-            {/* Internal Notes */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Internal Notes
-              </label>
-              <textarea
-                value={formData.internal_notes}
-                onChange={(e) => setFormData(prev => ({ ...prev, internal_notes: e.target.value }))}
-                placeholder="Private notes for your team..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
-                rows={3}
+          ) : (
+            <div className="space-y-4">
+              <FormField
+                label="Agency Name"
+                required
+                value={formData.agency_name}
+                onChange={(val: string) => setFormData({ ...formData, agency_name: val })}
               />
+              <button
+                onClick={() => setShowAgencyForm(false)}
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                ← Back to agency list
+              </button>
             </div>
-          </div>
-        </section>
-      </div>
+          )}
+          {errors.agency && <ErrorMessage message={errors.agency} />}
+        </div>
+      )}
     </div>
   );
 }
 
-// Client Management Component
-function ClientManagement() {
-  const [clients] = useState<Client[]>([
-    { 
-      id: '1', 
-      company_name: 'Acme Corporation', 
-      country: 'Belgium',
-      contact_person: 'John Doe',
-      contact_email: 'john@acme.com',
-      contact_phone: '+32 2 123 4567',
-      industry: 'Technology',
-      website: 'www.acme.com',
-      notes: 'Key client - fast response time'
+// Step 2: Job Details
+function DetailsStep({ formData, setFormData, errors }: any) {
+  const [extracting, setExtracting] = useState(false);
+
+  const handleAIExtract = async () => {
+    if (formData.job_description.length < 100) {
+      alert('Please enter at least 100 characters for AI extraction');
+      return;
     }
-  ]);
+
+    setExtracting(true);
+    try {
+      // API call will go here
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Mock AI extraction
+      setFormData({
+        ...formData,
+        job_title: 'Senior Full Stack Developer',
+        location: 'Remote (EU)',
+        required_skills: ['React', 'Node.js', 'TypeScript', 'PostgreSQL']
+      });
+    } catch (error) {
+      alert('AI extraction failed');
+    } finally {
+      setExtracting(false);
+    }
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="bg-white rounded-xl shadow-sm border p-4 flex items-center justify-between">
-        <div>
-          <h3 className="font-semibold text-gray-900">Client Database</h3>
-          <p className="text-sm text-gray-600">{clients.length} active clients</p>
-        </div>
-        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-          <Plus className="w-4 h-4 inline mr-2" />
-          Add Client
-        </button>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Job Details</h2>
+        <p className="text-gray-600">Provide complete job information</p>
       </div>
 
-      {clients.map(client => (
-        <div key={client.id} className="bg-white rounded-xl shadow-sm border p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-xl font-bold text-gray-900">{client.company_name}</h3>
-              <p className="text-gray-600">{client.industry} • {client.country}</p>
-            </div>
-            <button className="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded-lg text-sm">
-              Edit
-            </button>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-gray-600">Contact:</span>
-              <p className="font-medium">{client.contact_person}</p>
-            </div>
-            <div>
-              <span className="text-gray-600">Email:</span>
-              <p className="font-medium">{client.contact_email}</p>
-            </div>
-          </div>
+      {/* Basic Info */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <FormField
+          label="Job Title"
+          required
+          value={formData.job_title}
+          onChange={(val: string) => setFormData({ ...formData, job_title: val })}
+          error={errors.job_title}
+          placeholder="e.g., Senior Full Stack Developer"
+        />
+        <FormField
+          label="Location"
+          required
+          value={formData.location}
+          onChange={(val: string) => setFormData({ ...formData, location: val })}
+          error={errors.location}
+          placeholder="e.g., Remote, Brussels, Hybrid"
+        />
+        <FormField
+          label="Number of Positions"
+          type="number"
+          value={formData.num_positions}
+          onChange={(val: number) => setFormData({ ...formData, num_positions: val })}
+          min={1}
+        />
+        <FormSelect
+          label="Country"
+          value={formData.country}
+          onChange={(val: string) => setFormData({ ...formData, country: val })}
+          options={[
+            { value: '', label: 'Select country...' },
+            { value: 'BE', label: 'Belgium' },
+            { value: 'NL', label: 'Netherlands' },
+            { value: 'LU', label: 'Luxembourg' },
+            { value: 'DE', label: 'Germany' },
+            { value: 'FR', label: 'France' }
+          ]}
+        />
+      </div>
+
+      {/* Contract Type */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-3">
+          Contract Type <span className="text-red-500">*</span>
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setFormData({ ...formData, contract_type: 'freelance' })}
+            className={`p-4 rounded-lg border-2 ${
+              formData.contract_type === 'freelance'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-300 hover:border-gray-400'
+            }`}
+          >
+            <Briefcase className="w-6 h-6 mx-auto mb-2" />
+            <div className="font-medium">Freelance/Contract</div>
+          </button>
+          <button
+            onClick={() => setFormData({ ...formData, contract_type: 'permanent' })}
+            className={`p-4 rounded-lg border-2 ${
+              formData.contract_type === 'permanent'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-300 hover:border-gray-400'
+            }`}
+          >
+            <Building2 className="w-6 h-6 mx-auto mb-2" />
+            <div className="font-medium">Permanent</div>
+          </button>
         </div>
-      ))}
+        {errors.contract_type && <ErrorMessage message={errors.contract_type} />}
+      </div>
+
+      {/* Contract-specific fields */}
+      {formData.contract_type === 'freelance' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <FormField
+            label="Duration"
+            value={formData.duration}
+            onChange={(val: string) => setFormData({ ...formData, duration: val })}
+            placeholder="e.g., 6 months"
+          />
+          <FormField
+            label="Start Date"
+            value={formData.start_date}
+            onChange={(val: string) => setFormData({ ...formData, start_date: val })}
+            placeholder="e.g., ASAP, January 2025"
+          />
+          <FormField
+            label="Daily Rate"
+            value={formData.daily_rate}
+            onChange={(val: string) => setFormData({ ...formData, daily_rate: val })}
+            placeholder="e.g., €600-700"
+          />
+        </div>
+      )}
+
+      {formData.contract_type === 'permanent' && (
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            label="Start Date"
+            value={formData.start_date}
+            onChange={(val: string) => setFormData({ ...formData, start_date: val })}
+            placeholder="e.g., February 2025"
+          />
+          <FormField
+            label="Annual Salary"
+            value={formData.annual_salary}
+            onChange={(val: string) => setFormData({ ...formData, annual_salary: val })}
+            placeholder="e.g., €50,000-60,000"
+          />
+        </div>
+      )}
+
+      {/* Job Description with AI */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-sm font-medium text-gray-700">
+            Job Description <span className="text-red-500">*</span>
+          </label>
+          <button
+            onClick={handleAIExtract}
+            disabled={extracting || formData.job_description.length < 100}
+            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2"
+          >
+            {extracting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Extracting...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                AI Extract
+              </>
+            )}
+          </button>
+        </div>
+        <textarea
+          value={formData.job_description}
+          onChange={(e) => setFormData({ ...formData, job_description: e.target.value })}
+          className="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+          placeholder="Paste complete job description here..."
+        />
+        <div className="flex justify-between mt-2 text-xs">
+          <span className={formData.job_description.length >= 100 ? 'text-green-600' : 'text-gray-500'}>
+            {formData.job_description.length} characters
+            {formData.job_description.length < 100 && ' (minimum 100)'}
+          </span>
+        </div>
+        {errors.job_description && <ErrorMessage message={errors.job_description} />}
+      </div>
     </div>
   );
 }
 
-// Quick Add Client Modal
-function QuickAddClientModal({ onClose }: { onClose: () => void }) {
-  const [formData, setFormData] = useState({
-    company_name: '',
-    country: '',
-    contact_person: '',
-    contact_email: '',
-    contact_phone: '',
-    industry: '',
-    website: ''
-  });
+// Step 3: Requirements
+function RequirementsStep({ formData, setFormData, errors }: any) {
+  const [newSkill, setNewSkill] = useState('');
+
+  const addSkill = (type: 'required' | 'optional') => {
+    if (!newSkill.trim()) return;
+    
+    const field = type === 'required' ? 'required_skills' : 'optional_skills';
+    if (!formData[field].includes(newSkill.trim())) {
+      setFormData({
+        ...formData,
+        [field]: [...formData[field], newSkill.trim()]
+      });
+      setNewSkill('');
+    }
+  };
+
+  const removeSkill = (type: 'required' | 'optional', skill: string) => {
+    const field = type === 'required' ? 'required_skills' : 'optional_skills';
+    setFormData({
+      ...formData,
+      [field]: formData[field].filter((s: string) => s !== skill)
+    });
+  };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b flex items-center justify-between">
-          <h3 className="text-xl font-bold">Add New Client</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Requirements & Skills</h2>
+        <p className="text-gray-600">Define what you're looking for</p>
+      </div>
 
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Company Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.company_name}
-              onChange={e => setFormData(prev => ({ ...prev, company_name: e.target.value }))}
-              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Acme Corporation"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Country <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={formData.country}
-              onChange={e => setFormData(prev => ({ ...prev, country: e.target.value }))}
-              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+      {/* Required Skills */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Required Skills <span className="text-red-500">*</span>
+        </label>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {formData.required_skills.map((skill: string) => (
+            <span
+              key={skill}
+              className="px-3 py-1.5 bg-red-100 text-red-800 rounded-full text-sm font-medium border border-red-300 flex items-center gap-2"
             >
-              <option value="">Select country...</option>
-              <option value="Belgium">Belgium</option>
-              <option value="Netherlands">Netherlands</option>
-              <option value="Luxembourg">Luxembourg</option>
-              <option value="Germany">Germany</option>
-              <option value="France">France</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Contact Person
-            </label>
-            <input
-              type="text"
-              value={formData.contact_person}
-              onChange={e => setFormData(prev => ({ ...prev, contact_person: e.target.value }))}
-              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="John Doe"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email
-            </label>
-            <input
-              type="email"
-              value={formData.contact_email}
-              onChange={e => setFormData(prev => ({ ...prev, contact_email: e.target.value }))}
-              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="john@acme.com"
-            />
-          </div>
+              {skill}
+              <button onClick={() => removeSkill('required', skill)}>
+                <X className="w-3.5 h-3.5 hover:text-red-900" />
+              </button>
+            </span>
+          ))}
         </div>
-
-        <div className="p-6 border-t flex gap-3">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newSkill}
+            onChange={(e) => setNewSkill(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill('required'))}
+            placeholder="Type skill and press Enter"
+            className="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm"
+          />
           <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            onClick={() => addSkill('required')}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
           >
-            Cancel
+            Add
           </button>
+        </div>
+        {errors.required_skills && <ErrorMessage message={errors.required_skills} />}
+      </div>
+
+      {/* Optional Skills */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Optional Skills (Nice to Have)
+        </label>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {formData.optional_skills.map((skill: string) => (
+            <span
+              key={skill}
+              className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded-full text-sm font-medium border border-blue-300 flex items-center gap-2"
+            >
+              {skill}
+              <button onClick={() => removeSkill('optional', skill)}>
+                <X className="w-3.5 h-3.5 hover:text-blue-900" />
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newSkill}
+            onChange={(e) => setNewSkill(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill('optional'))}
+            placeholder="Type skill and press Enter"
+            className="flex-1 p-2.5 border border-gray-300 rounded-lg text-sm"
+          />
           <button
-            onClick={() => {
-              // Save client logic
-              alert('Client saved successfully!');
-              onClose();
-            }}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            onClick={() => addSkill('optional')}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
           >
-            Save Client
+            Add
           </button>
         </div>
       </div>
+
+      {/* Other Requirements */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <FormField
+          label="Experience Required"
+          value={formData.experience_years}
+          onChange={(val: string) => setFormData({ ...formData, experience_years: val })}
+          placeholder="e.g., 5+ years, 3-5 years"
+        />
+        <FormSelect
+          label="Education Level"
+          value={formData.education_level}
+          onChange={(val: string) => setFormData({ ...formData, education_level: val })}
+          options={[
+            { value: '', label: 'Not specified' },
+            { value: 'high_school', label: 'High School' },
+            { value: 'bachelor', label: "Bachelor's Degree" },
+            { value: 'master', label: "Master's Degree" },
+            { value: 'phd', label: 'PhD' }
+          ]}
+        />
+      </div>
+
+      {/* Internal Settings */}
+      <div className="border-t pt-6">
+        <h3 className="font-semibold text-gray-900 mb-4">Internal Settings</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <FormSelect
+            label="Priority"
+            value={formData.priority}
+            onChange={(val: string) => setFormData({ ...formData, priority: val })}
+            options={[
+              { value: 'low', label: '🟢 Low' },
+              { value: 'medium', label: '🟡 Medium' },
+              { value: 'high', label: '🟠 High' },
+              { value: 'urgent', label: '🔴 Urgent' }
+            ]}
+          />
+          <FormSelect
+            label="Assign To"
+            value={formData.assigned_to}
+            onChange={(val: string) => setFormData({ ...formData, assigned_to: val })}
+            options={[
+              { value: '', label: 'Unassigned' },
+              { value: 'team_it', label: 'IT Team' },
+              { value: 'sarah', label: 'Sarah Johnson' }
+            ]}
+          />
+        </div>
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Internal Notes
+          </label>
+          <textarea
+            value={formData.internal_notes}
+            onChange={(e) => setFormData({ ...formData, internal_notes: e.target.value })}
+            className="w-full p-3 border border-gray-300 rounded-lg text-sm"
+            rows={3}
+            placeholder="Private notes for your team..."
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Helper Components
+function FormField({ label, value, onChange, type = 'text', required = false, error, placeholder = '', min }: any) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(type === 'number' ? Number(e.target.value) : e.target.value)}
+        placeholder={placeholder}
+        min={min}
+        className={`w-full p-2.5 border rounded-lg text-sm ${
+          error ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+        } focus:ring-2`}
+      />
+      {error && <ErrorMessage message={error} />}
+    </div>
+  );
+}
+
+function FormSelect({ label, value, onChange, options, required = false }: any) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full p-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+      >
+        {options.map((opt: any) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function ErrorMessage({ message }: { message: string }) {
+  return (
+    <div className="flex items-center gap-1 mt-1 text-xs text-red-600">
+      <AlertCircle className="w-3 h-3" />
+      <span>{message}</span>
     </div>
   );
 }
